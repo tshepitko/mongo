@@ -45,7 +45,7 @@ def get_server_status(db, command):
 def write_to_stats(host, command, fname):
     db = mongo_connect(host)
     data = json.dumps(get_server_status(db, command[0]), default=json_util.default)
-    with open(fname, 'a') as f:
+    with open(fname, 'w') as f:
         f.write(str(time.mktime(datetime.now().timetuple())) + " delimeterrr " + str(data))
     return (data)
 
@@ -68,43 +68,42 @@ def check_stats(fname):
         lines = file_len(str(fname))
         if lines == 0:
            write_to_stats(sys.argv[1], sys.argv[2:], str(fname))
-           return 0
+           return False
         else:
-            cut(str(fname))
-            write_to_stats(sys.argv[1], sys.argv[2:], str(fname))
-            return 1
+            if check_age(fname) == False:
+                data = write_to_stats(sys.argv[1], sys.argv[2:], str(fname))
+            else:
+                db = mongo_connect(sys.argv[1])
+                data = json.dumps(get_server_status(db, sys.argv[2]), default=json_util.default)
+            return data
     except:
         write_to_stats(sys.argv[1], sys.argv[2:], str(fname))
-        return 0
+        return False
 
-def parse_cmd(data,command):
+def parse_cmd(command):
     try:
-        for param in command:
-            data = data[param]
+        return command.split('.')
+    except:
+        return('<Incorrect input>')
 
+def parse_arg(data, command):
+    cmd = parse_cmd(command)
+    temp_data = data
+    try:
+        for param in cmd:
+            temp_data = temp_data[param]
+        return temp_data
     except:
         print('<Not successful command>')
-
-def parse_arg(old_data, new_data, command):
-    command = command.split()
-    temp_data = new_data
-    if command[0] == 'opcounters':
-        try:
-            for param in command:
-                temp_data = temp_data[param]
-            return temp_data
-        except:
-            print('<Not successful command>')
 
 def check_age(fname):
     with open(str(fname)) as f:
         file_time = int(f.read().split('.')[0])
     curr_time = int(time.mktime(datetime.now().timetuple()))
     if curr_time - file_time < 90:
-        return 0
+        return True
     else:
-        write_to_stats(sys.argv[1], sys.argv[2:], str(fname))
-        return 1
+        return False
 
 def read_status(fname):
     with open(str(fname)) as f:
@@ -112,7 +111,17 @@ def read_status(fname):
 
 
 def main():
-    check_stats(sys.argv[2])
+    try:
+        new_data = json.loads(check_stats(sys.argv[2]))
+        if type(new_data) is dict:
+            old_data = read_status(sys.argv[2])
+            if sys.argv[2] == 'serverStatus' and sys.argv[3].split('.')[0] == 'opcounters':
+                result = int(parse_arg(new_data,sys.argv[3])) - int(parse_arg(old_data,sys.argv[3]))
+            else:
+                result = parse_arg(old_data, sys.argv[3])
+            print(result)
+    except:
+        print('<Internal error>')
 
 
 if __name__ == "__main__":
